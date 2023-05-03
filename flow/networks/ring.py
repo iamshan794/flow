@@ -7,7 +7,7 @@ from numpy import pi, sin, cos, linspace
 
 ADDITIONAL_NET_PARAMS = {
     # length of the ring road
-    "length": 230,
+    "length": 260,
     # number of lanes
     "lanes": 1,
     # speed limit for all edges

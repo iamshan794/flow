@@ -11,8 +11,28 @@ from flow.core.experiment import Experiment
 
 from flow.core.params import AimsunParams
 from flow.utils.rllib import FlowParamsEncoder
+import ray
+from ray.tune.registry import register_env
+from ray.rllib.agents.registry import get_agent_class
+
+from flow.utils.registry import make_create_env
+from ray.rllib.agents.ppo import PPOAgent
+import gym.envs.registration as reg
+import gym.envs as envs 
+import gym 
 
 
+class newExperiment(Experiment):
+    def __init__(self,flow_params,callables,env_name):
+       super(newExperiment,self).__init__(flow_params=flow_params,custom_callables=callables) 
+       #create_env,gym_name=make_create_env(flow_params)
+       #register_env(env_name,create_env) 
+       reg.register(env_name)
+       print("************Registered model "+env_name+"***********")
+             
+       #self.env=create_env() 
+
+       #print("LIST OF ENVS",list_envs())
 def parse_args(args):
     """Parse training options user can specify in command line.
 
@@ -32,6 +52,9 @@ def parse_args(args):
              'exp_configs/non_rl.')
 
     # optional input parameters
+    # --------------------ENTER params.json path --------------------------------------------------
+
+    parser.add_argument('--parameters',type=str,default='/root/ray_results/stabilizing_the_ring/PPOFinal/params.json')
     parser.add_argument(
         '--num_runs', type=int, default=1,
         help='Number of simulations to run. Defaults to 1.')
@@ -57,9 +80,10 @@ if __name__ == "__main__":
     flags = parse_args(sys.argv[1:])
 
     # Get the flow_params object.
-    module = __import__("exp_configs.non_rl", fromlist=[flags.exp_config])
+    module = __import__("exp_configs.rl.singleagent", fromlist=[flags.exp_config])
     flow_params = getattr(module, flags.exp_config).flow_params
-
+    
+    
     # Get the custom callables for the runner.
     if hasattr(getattr(module, flags.exp_config), "custom_callables"):
         callables = getattr(module, flags.exp_config).custom_callables
@@ -77,17 +101,48 @@ if __name__ == "__main__":
 
     # Specify an emission path if they are meant to be generated.
     if flags.gen_emission:
+        print("GENERATING EMISSIONS")
         flow_params['sim'].emission_path = "./data"
 
         # Create the flow_params object
         fp_ = flow_params['exp_tag']
         dir_ = flow_params['sim'].emission_path
+        
         with open(os.path.join(dir_, "{}.json".format(fp_)), 'w') as outfile:
             json.dump(flow_params, outfile,
                       cls=FlowParamsEncoder, sort_keys=True, indent=4)
 
     # Create the experiment object.
-    exp = Experiment(flow_params, callables)
+    
+    with open(flags.parameters) as json_file:
+        config=json.load(json_file)
+    
 
+    #exp=newExperiment(flow_params=flow_params,callables=callables,env_name=config['env'])
+    exp=Experiment(flow_params=flow_params,custom_callables=callables)
+    ray.init()
+    alg_name=config['env_config']['run']
+    #agentcls=get_agent_class(alg_name)
+      
+    #agent=agentcls(config=config,env=config['env'])
+    agent=PPOAgent(config=config,env=config['env'])
+    #change checkpoints path --------------------------------------------------------- here 
+
+    agent.restore('/root/ray_results/stabilizing_the_ring/PPOFinal/checkpoint_1440/checkpoint-1440')
+    print(agent.config['gamma'],agent.config['use_gae'])
+    print(agent.config['model'])
+    
+
+    print("MODEL RESOTRED SUCCESSFULLY")
+    #exp=newExperiment(flow_params=flow_params,callables=callables,env_name=config['env'])
+    rl_actions=agent.compute_action # this is where we send the agent 
     # Run for the specified number of rollouts.
-    exp.run(flags.num_runs, convert_to_csv=flags.gen_emission)
+    ls=list(envs.registry.all())
+    ls=[ls[i].id for i in range(len(ls))]
+    print(str(config['env'] in ls),"VERIFIED REGISTRATION")
+    gym.make(config['env'])
+
+
+    exp.run(flags.num_runs, convert_to_csv=flags.gen_emission,rl_actions=rl_actions)
+    
+    

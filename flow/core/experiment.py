@@ -128,6 +128,7 @@ class Experiment:
         })
 
         if rl_actions is None:
+            print("NOT USING USER DEFINED AGENT")
             def rl_actions(*_):
                 return None
 
@@ -145,7 +146,7 @@ class Experiment:
                 state, reward, done, _ = self.env.step(rl_actions(state))
                 t1 = time.time()
                 times.append(1 / (t1 - t0))
-
+                print("ACTION:",rl_actions(state))
                 # Compute the velocity speeds and cumulative returns.
                 veh_ids = self.env.k.vehicle.get_ids()
                 vel.append(np.mean(self.env.k.vehicle.get_speed(veh_ids)))
